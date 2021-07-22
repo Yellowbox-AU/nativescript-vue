@@ -13,3 +13,11 @@ dist/
 packages/nativescript-vue-template-compiler/index.js
 !docs/dist/
 RELEASE_NOTES*.md
+
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
