@@ -47,7 +47,7 @@ export default {
     setFrame(this.properties.id, this)
   },
   destroyed() {
-    deleteFrame(this.properties.id)
+    deleteFrame(this.properties.id, this)
   },
   render(h) {
     let vnode = null

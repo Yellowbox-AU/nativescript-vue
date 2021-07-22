@@ -1,3 +1,7 @@
+/** Global list of frames by id. We keep an array for each frame id because if a user navigates to
+ * the same component they are already on or to another component containing a frame with an id
+ * matching one of those already mounted then we will otherwise loose the reference to the first
+ * frame instance. */
 const frames = {}
 
 export function setFrame(id, frame) {
