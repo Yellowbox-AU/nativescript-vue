@@ -48,13 +48,7 @@ export interface NativeScriptVue<V = View> extends Vue {
 
     $modal?: { close: (data?: any) => Promise<typeof data> };
 
-    /**
-     * Open a modal using a component
-     * @param {typeof Vue} component
-     * @param {ModalOptions} options
-     * @returns {any}
-     */
-    $showModal: (component: typeof Vue, options?: ModalOptions) => Promise<any>;
+    $showModal: (component: import('vue').ComponentOptions<Vue> | string, options?: ModalOptions) => Promise<any>;
 
     /**
      * starts the nativescript application
