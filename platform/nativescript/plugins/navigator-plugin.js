@@ -1,7 +1,8 @@
 import { isObject, isDef, isPrimitive } from 'shared/util'
 import { getFrame } from '../util/frame'
 import { updateDevtools } from '../util'
-import { Page, Placeholder } from '@nativescript/core'
+import { Page } from '@nativescript/core'
+import { ensureCorrectView } from './navigation-utils'
 
 let sequentialCounter = 0
 
@@ -93,44 +94,7 @@ export default {
           })
       }).$mount()
 
-      const componentName =
-        (typeof component === 'string'
-          ? component
-          : component.name ||
-            (component.__file && component.__file.match(/\w+(?=\.vue)/))) ||
-        'Unknown'
-      let page = navEntryInstance.$el.nativeView
-      // This check's purpose is to determine if we are navigating to an async component.
-      if (page instanceof Placeholder) {
-        console.log(
-          `Navigation destination component ${
-            componentName || 'Unknown'
-          } rendered a <Placeholder> at its root. Waiting for update with <Page> before navigation...`
-        )
-        // Wait for update event and make sure <Page> is rendered as root node
-        page = await new Promise((resolve, reject) => {
-          let updatedFn = function () {
-            if (this.$el.nativeView instanceof Page) {
-              resolve(this.$el.nativeView)
-              this.$off('hook:updated', updatedFn)
-            } else if (!(this.$el.nativeView instanceof Placeholder)) {
-              reject(
-                new Error(
-                  `Root element of navigateTo destination component ("${componentName}") must be a <Page>, got <${this.$el.nativeView.constructor.name}>`
-                )
-              )
-              navEntryInstance.$destroy()
-              this.$off('hook:updated', updatedFn)
-            }
-          }
-          navEntryInstance.$on('hook:updated', updatedFn)
-        })
-      } else if (!(page instanceof Page)) {
-        setTimeout(() => navEntryInstance.$destroy(), 0)
-        throw new Error(
-          `Root element of navigateTo destination component ("${componentName}") must be a <Page>, got <${page.constructor.name}>`
-        )
-      }
+      let page = await ensureCorrectView(navEntryInstance, component, Page)
 
       return new Promise(resolve => {
         updateDevtools()
