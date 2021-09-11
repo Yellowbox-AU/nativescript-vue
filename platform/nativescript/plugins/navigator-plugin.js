@@ -127,7 +127,7 @@ export default {
         const dispose = page.disposeNativeView
         page.disposeNativeView = (...args) => {
           navEntryInstance.$destroy()
-          dispose.call(page, args)
+          return dispose.call(page, args)
         }
 
         frame.navigate(Object.assign({}, options, { create: () => page }))
