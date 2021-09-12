@@ -23,6 +23,16 @@ export default {
     if (frame && !frame.firstPageMounted && !frame.$el.nativeView.currentPage) {
       frame.firstPageMounted = true
       frame.notifyFirstPageMounted(this)
+    } else if (frame && frame.firstPageMounted) {
+      // Navigate the frame to the new page, clearing its history, since the intention of replacing
+      // the only <Page> child of a frame is that we want that page to be shown instead of the
+      // current one. Do not animate as this is a replacement not a regular navigation.
+      frame.navigate({
+        backstackVisible: this.backstackVisible,
+        clearHistory: true,
+        animated: false,
+        create: () => this.$el.nativeView
+      })
     }
 
     const handler = e => {
