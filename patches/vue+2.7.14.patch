@@ -1,0 +1,13 @@
+diff --git a/node_modules/vue/src/core/util/next-tick.ts b/node_modules/vue/src/core/util/next-tick.ts
+index 5e67bd7..d42cead 100644
+--- a/node_modules/vue/src/core/util/next-tick.ts
++++ b/node_modules/vue/src/core/util/next-tick.ts
+@@ -9,7 +9,7 @@ export let isUsingMicroTask = false
+ const callbacks: Array<Function> = []
+ let pending = false
+ 
+-function flushCallbacks() {
++export function flushCallbacks() {
+   pending = false
+   const copies = callbacks.slice(0)
+   callbacks.length = 0

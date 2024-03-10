@@ -1,3 +1,4 @@
+//@ts-check
 import { setFrame, getFrame, deleteFrame } from '../../util/frame'
 import { warn } from 'core/util/debug'
 
@@ -114,7 +115,8 @@ export default {
       this.navigate(options)
     },
 
-    navigate(entry, back = false) {
+    async navigate(entry, back = false) {
+      /** @type {import('@nativescript/core').Frame} */
       const frame = this._getFrame()
 
       if (back) {

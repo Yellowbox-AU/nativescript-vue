@@ -2,7 +2,7 @@
 import { Placeholder } from '@nativescript/core'
 
 /**
- * @param {import('vue').ComponentOptions} component
+ * @param {import('vue').ComponentOptions | string} component
  * @returns {string}
  */
 function getComponentName(component) {
@@ -29,10 +29,10 @@ const REPLACE_PLACEHOLDER_TIMEOUT = 7500
  * provided, we check that the non-Placeholder View matches the required one as a final step.
  *
  * @template {import('@nativescript/core').View} R
- * @param {import('vue/types/vue').CombinedVueInstance<import('nativescript-vue').NativeScriptVue, {}, {}, {}, {}>} navEntryInstance
- * @param {import('vue').ComponentOptions<import('nativescript-vue').NativeScriptVue>} component Reference to the component passed by the user, to provide the user with more informative errors
+ * @param {import('vue/types/vue').CombinedVueInstance<import('nativescript-vue').NativeScriptVue<R>, {}, {}, {}, {}>} navEntryInstance
+ * @param {import('vue').ComponentOptions<import('nativescript-vue').NativeScriptVue> | string} component Reference to the component passed by the user, to provide the user with more informative errors
  * @param {new (...args: any[]) => R} [requiredClass] Constraint on which View subclass the users component must return as its root. If violated a descriptive error will be thrown.
- * @returns {Promise<import('@nativescript/core').View>}
+ * @returns {Promise<R>}
  */
 export async function ensureCorrectView(
   navEntryInstance,
@@ -70,7 +70,7 @@ export async function ensureCorrectView(
     caughtErr ||
     (requiredClass && !(navEntryInstance.nativeView instanceof requiredClass))
   ) {
-    setTimeout(() => navEntryInstance.$destroy(), 0)
+    navEntryInstance.$destroy()
     throw (
       caughtErr ||
       new Error(

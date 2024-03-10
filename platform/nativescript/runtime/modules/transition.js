@@ -5,12 +5,42 @@ import { activeInstance } from 'core/instance/lifecycle'
 import { once, isDef, isUndef, isObject, toNumber } from 'shared/util'
 
 import {
-  nextFrame,
   resolveTransition,
   whenTransitionEnds,
   addTransitionClass,
   removeTransitionClass
 } from 'web/runtime/transition-util'
+
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// TODO:
+// - Commit fixes here (maybe with a better solution than requestAnimationFrame and getAnimations)
+//   https://nativescripting.com/posts/nativescript-vue-transitions
+// - Commit fixes in ViewNode.js (actually provide an implementation for removeAttribute not just ()
+//   => false, as this is what's causing <transition>s to always need a class
+
+// This is an alternative to the getAnimations + setTimeout + requestAnimationFrame checking
+// getAnimations loop, but the problem with just getting the animations duration and doing a
+// setTimeout equal to the duration of the animation is that often NativeScript actually hasn't
+// finished the animation within its duration. This causes the animation to get cancelled when the
+// animation class is removed, causing flickering or disappearance
+
+// Define window.getComputedStyle temporarily to allow whenTransitionEnds to run correctly
+// const whenTransitionEndsWrapped = function () {
+//   global['window'] = {
+//     getComputedStyle(el) {
+//       // The style attributes that whenTransitionEnds callee `getTransitionInfo` depends on (e.g.
+//       // animationDuration, animationDelay) to determine how long the transition will actually take
+//       // to complete are stored as direct properties of the native view in NativeScript.
+//       return el.nativeView
+//     }
+//   }
+//   whenTransitionEnds(...arguments)
+//   delete global['window']
+// }
+
+const getAnimations = el => el.nativeView._cssState._appliedAnimations.filter(aa => aa._isPlaying && aa.iterations === 1).flatMap(aa => aa.animations)
 
 export function enter(vnode, toggleDisplay) {
   const el = vnode.elm
@@ -41,6 +71,7 @@ export function enter(vnode, toggleDisplay) {
     appearClass,
     appearToClass,
     appearActiveClass,
+    leaveToClass,
     beforeEnter,
     enter,
     afterEnter,
@@ -98,7 +129,7 @@ export function enter(vnode, toggleDisplay) {
 
   const cb = (el._enterCb = once(() => {
     if (expectsCSS) {
-      removeTransitionClass(el, toClass)
+      // removeTransitionClass(el, toClass)
       removeTransitionClass(el, activeClass)
     }
     if (cb.cancelled) {
@@ -134,7 +165,17 @@ export function enter(vnode, toggleDisplay) {
   if (expectsCSS) {
     addTransitionClass(el, startClass)
     addTransitionClass(el, activeClass)
-    nextFrame(() => {
+    requestAnimationFrame(async () => {
+      // TODO: Fix issue where this removeTransitionClass call actually runs before NativeScript
+      // Animator has had time to finish the 0.01ms animation that gets applied on the leaveClass by
+      // default, causing the leaveClass animation to be cancelled. Could probably be done using the
+      // same nasty requestAnimationFrame and check nativeView animations hack used below but would
+      // be much better to avoid that. It looks like there is nowhere the animation promise that
+      // gets created as a result of applying the class gets exposed on the nativeView or returned
+      // to a function we call though, so how can we await the animationFinishedPromise directly
+      // without modifying NativeScript's animation-common.js?
+      // while (getAnimations(el).length)
+      //   await sleep(16)
       removeTransitionClass(el, startClass)
       if (!cb.cancelled) {
         addTransitionClass(el, toClass)
@@ -142,7 +183,20 @@ export function enter(vnode, toggleDisplay) {
           if (isValidDuration(explicitEnterDuration)) {
             setTimeout(cb, explicitEnterDuration)
           } else {
-            //whenTransitionEnds(el, type, cb)
+            // cb MUST NOT be called before the animation is actually complete, otherwise it will cancel it, causing a flash
+            const time = Math.max(...getAnimations(el).map(a => a.duration || 0), 0)
+            await new Promise(resolve => setTimeout(resolve, time))
+            // Keep waiting until animations are actually done (the animation promise isn't actually
+            // exposed to us so without modifying NativeScript / ui / animations this is the best we
+            // can do)
+            const checkCb = () => {
+              if (getAnimations(el).length) {
+                requestAnimationFrame(checkCb)
+              } else {
+                cb()
+              }
+            }
+            requestAnimationFrame(checkCb)
           }
         }
       }
@@ -184,6 +238,7 @@ export function leave(vnode, rm) {
     leaveClass,
     leaveToClass,
     leaveActiveClass,
+    enterActiveClass,
     beforeLeave,
     leave,
     afterLeave,
@@ -208,7 +263,7 @@ export function leave(vnode, rm) {
       el.parentNode._pending[vnode.key] = null
     }
     if (expectsCSS) {
-      removeTransitionClass(el, leaveToClass)
+      // removeTransitionClass(el, leaveToClass)
       removeTransitionClass(el, leaveActiveClass)
     }
     if (cb.cancelled) {
@@ -244,7 +299,9 @@ export function leave(vnode, rm) {
     if (expectsCSS) {
       addTransitionClass(el, leaveClass)
       addTransitionClass(el, leaveActiveClass)
-      nextFrame(() => {
+      requestAnimationFrame(async () => {
+        // while (getAnimations(el).length)
+        //   await sleep(16)
         removeTransitionClass(el, leaveClass)
         if (!cb.cancelled) {
           addTransitionClass(el, leaveToClass)
@@ -252,7 +309,20 @@ export function leave(vnode, rm) {
             if (isValidDuration(explicitLeaveDuration)) {
               setTimeout(cb, explicitLeaveDuration)
             } else {
-              //whenTransitionEnds(el, type, cb)
+              // cb MUST NOT be called before the animation is actually complete, otherwise it will cancel it, causing a flash
+              const time = Math.max(...getAnimations(el).map(a => a.duration || 0), 0)
+              await new Promise(resolve => setTimeout(resolve, time))
+              // Keep waiting until animations are actually done (the animation promise isn't actually
+              // exposed to us so without modifying NativeScript / ui / animations this is the best we
+              // can do)
+              const checkCb = () => {
+                if (getAnimations(el).length) {
+                  requestAnimationFrame(checkCb)
+                } else {
+                  cb()
+                }
+              }
+              requestAnimationFrame(checkCb)
             }
           }
         }
@@ -306,6 +376,10 @@ function getHookArgumentsLength(fn) {
     return (fn._length || fn.length) > 1
   }
 }
+
+/** 
+ * On enter/leave, if v-show is TRUE, we immediately remove the vnode?
+ */
 
 function _enter(_, vnode) {
   if (vnode.data.show !== true) {

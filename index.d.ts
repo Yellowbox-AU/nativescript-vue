@@ -4,9 +4,11 @@ import {
     BackstackEntry,
 } from '@nativescript/core'
 import { ItemEventData } from '@nativescript/core'
+import { Frame } from '@nativescript/core'
 import { View } from '@nativescript/core'
 import { ShowModalOptions } from '@nativescript/core'
 import { Vue, VueConstructor, VueConfiguration } from 'vue/types/vue'
+import ElementNode from './platform/nativescript/renderer/ElementNode'
 
 // ListView ItemEventData with the addition of the item property
 export type NativeScriptVueItemEventData<T> = ItemEventData & { item: T }
@@ -22,7 +24,7 @@ export interface NavigationEntryVue extends NavigationEntry {
 }
 
 export type navigateTo = (
-    component: VueConstructor,
+    component: Parameters<import('vue').CreateElement>[0],
     options?: NavigationEntryVue,
     cb?: () => Page,
 ) => Promise<Page>
@@ -42,6 +44,7 @@ export interface ModalOptions extends Partial<ShowModalOptions> {
 // create a nativescript vue class that extends vue.js
 export interface NativeScriptVue<V = View> extends Vue {
     nativeView: V
+    $el: ElementNode
 
     $navigateTo: navigateTo
     $navigateBack: navigateBack
@@ -58,6 +61,8 @@ export interface NativeScriptVue<V = View> extends Vue {
 
 export interface NativeScriptVueConstructor extends VueConstructor<NativeScriptVue>
 {
+    options: any
+
     navigateTo: navigateTo
     navigateBack: navigateBack
                                               

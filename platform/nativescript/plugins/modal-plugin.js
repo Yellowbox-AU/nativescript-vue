@@ -1,7 +1,8 @@
-import { isObject, isDef, isPrimitive } from 'shared/util'
+import { isObject, isDef } from 'shared/util'
 import { updateDevtools } from '../util'
 import { VUE_ELEMENT_REF } from '../renderer/ElementNode'
 import { ensureCorrectView } from './navigation-utils'
+import { ContentView, Placeholder, View } from '@nativescript/core'
 
 let sequentialCounter = 0
 
@@ -21,6 +22,7 @@ function serializeModalOptions(options) {
     .join(', ')
 }
 
+/** @returns {import('@nativescript/core').View} */
 function getTargetView(target) {
   if (isObject(target) && isDef(target.$el)) {
     return target.$el.nativeView
@@ -69,12 +71,12 @@ export default {
 
           resolved = true
           resolve(data)
-          modalPage.closeModal()
+          modalEntryInstance.nativeView.closeModal()
 
           // emitted to show up in devtools
           // for debugging purposes
-          navEntryInstance.$emit('modal:close', data)
-          navEntryInstance.$destroy()
+          modalEntryInstance.$emit('modal:close', data)
+          modalEntryInstance.$destroy()
         }
 
         // build options object with defaults
@@ -89,24 +91,34 @@ export default {
           }
         )
 
-        const navEntryInstance = new Vue({
+        const modalEntryInstance = new Vue({
           name: 'ModalEntry',
           parent: options.target,
           methods: {
             closeCb
           },
-          render: h =>
-            h(component, {
-              props: options.props,
-              key: serializeModalOptions(options)
-            })
+          render: h => h(component, { key: serializeModalOptions(options),props: options.props })
         }).$mount()
 
-        let modalPage = await ensureCorrectView(navEntryInstance, component)
-
-        updateDevtools()
-
-        getTargetView(options.target).showModal(modalPage, options)
+        /** @type {View} */
+        let view, contentView = new ContentView(), updatedCb
+        contentView.iosOverflowSafeArea = false
+        modalEntryInstance.$on('hook:updated', updatedCb = async () => {
+          updateDevtools()
+          if (modalEntryInstance.nativeView && !(modalEntryInstance.nativeView instanceof Placeholder) && modalEntryInstance.nativeView !== view) {
+            // We will pass the ContentView to showModal so that we can actually change the content once it has been shown
+            const newView = modalEntryInstance.nativeView
+            const targetView = getTargetView(options.target)
+            // Set/replace the content of the view shown in the modal
+            contentView.content = newView
+            // If first time the component rendered non-placeholder content then we show the modal
+            // using the contentView
+            if (!view)
+              targetView.showModal(contentView, options)
+            view = newView
+          }
+        })
+        updatedCb()
       })
     }
   }

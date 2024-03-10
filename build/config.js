@@ -46,8 +46,9 @@ const builds = {
     moduleName: 'NativeScript-Vue',
     banner: banner('NativeScript-Vue'),
     intro,
-    external(id) {
-      return id.startsWith('@nativescript') || id.startsWith('weex')
+    external(id, ...args) {
+      console.log(`deciding if module ${args} is external`)
+      return id.startsWith('@nativescript') || id.startsWith('weex') || id === 'vue'
     },
   },
   'nativescript-vue-template-compiler': {

@@ -1,8 +1,10 @@
+// @ts-check
 import { isObject, isDef, isPrimitive } from 'shared/util'
 import { getFrame } from '../util/frame'
 import { updateDevtools } from '../util'
-import { Page } from '@nativescript/core'
-import { ensureCorrectView } from './navigation-utils'
+import { Page, Placeholder } from '@nativescript/core'
+import { NavigationType } from '@nativescript/core/ui/frame/frame-common'
+// import { ensureCorrectView } from './navigation-utils'
 
 let sequentialCounter = 0
 
@@ -53,7 +55,7 @@ export function findParentFrame(vm) {
 }
 
 export default {
-  install(Vue) {
+  install(/** @type {import('../../..').NativeScriptVueConstructor} */ Vue) {
     Vue.navigateBack = Vue.prototype.$navigateBack = function (
       options,
       backstackEntry = null
@@ -68,7 +70,7 @@ export default {
       frame.back(backstackEntry)
     }
 
-    Vue.navigateTo = Vue.prototype.$navigateTo = async function (
+    Vue.navigateTo = Vue.prototype.$navigateTo = function (
       component,
       options
     ) {
@@ -93,48 +95,82 @@ export default {
             key
           })
       }).$mount()
-
-      let page = await ensureCorrectView(navEntryInstance, component, Page)
-
-      return new Promise(resolve => {
-        updateDevtools()
-
+      
+      return new Promise((resolve, reject) => {
+        /** @type {Page} */
+        let page
         const resolveOnEvent = options.resolveOnEvent
-        // ensure we dont resolve twice event though this should never happen!
-        let resolved = false
+        const onUpdate = () => {
+          if (navEntryInstance.nativeView instanceof Page && navEntryInstance.nativeView !== page) {
+            updateDevtools()
 
-        const handler = args => {
-          if (args.isBackNavigation) {
-            page.off('navigatedFrom', handler)
+            const newPage = navEntryInstance.nativeView
+            // Add cleanup handlers. Only destroy the navEntryInstance if this Page instance is
+            // still the one at the root of the navEntryInstance
+            newPage.on('navigatedFrom', e => {
+              if (e.isBackNavigation && navEntryInstance.nativeView === newPage)
+                navEntryInstance.$destroy()
+            })
+            newPage.disposeNativeView = new Proxy(newPage.disposeNativeView, {
+              apply(target, thisArg, argArray) {
+                // console.log(`➖ 🧭  newPage.disposeNativeView ($destroy navEntryInstance? ${navEntryInstance.nativeView === newPage})`)
+                if (navEntryInstance.nativeView === newPage)
+                  navEntryInstance.$destroy()
+                return Reflect.apply(target, thisArg, argArray)
+              }
+            })
+
+            /** The asyncFactory from which the <Page> was rendered, if there is one. */
+            const asyncFactory = navEntryInstance._vnode.asyncFactory
+
+            if (newPage && page) {
+              // We had already navigated to a Page e.g. the loadingComp of an asyncFactory. We
+              // don't want to replay the initial navigation transition and we don't want the
+              // currently visible page to go into the backStack. We need to replace the page. NS
+              // has an implementation of replacePage but it only accepts a moduleName, so it has
+              // been copied here and refactored for the time being.
+              // TODO: Replace with call to replacePage (NS >= 8.1.0-rc.0) https://github.com/NativeScript/NativeScript/commit/ffab4c31658f9be2137cae5a824f8e8c9bf7aef2
+              /** @type {import('@nativescript/core').Frame} */
+              const nativeFrame = frame.nativeView
+              const currentBackstackEntry = nativeFrame._currentEntry;
+              const newBackstackEntry = {
+                entry: Object.assign({}, currentBackstackEntry.entry, { create: () => newPage }),
+                resolvedPage: newPage,
+                navDepth: currentBackstackEntry._navDepth,
+                fragmentTag: currentBackstackEntry.fragmentTag,
+                frameId: frame.id,
+              };
+              const navigationContext = {
+                entry: newBackstackEntry,
+                isBackNavigation: false,
+                navigationType: NavigationType.replace,
+              };
+              nativeFrame._navigationQueue.push(navigationContext);
+              nativeFrame._processNextNavigationEntry();
+            } else {
+              frame.navigate(Object.assign({}, options, { create: () => newPage }))
+            }
+
+            if (!asyncFactory || asyncFactory.resolved) {
+              // Only resolve if the users resolveOnEvent occurs on the final destination component
+              if (resolveOnEvent) {
+                newPage.once(resolveOnEvent, () => resolve(newPage))
+              } else {
+                resolve(newPage)
+              }
+            }
+
+            page = newPage
+          } else if (navEntryInstance.nativeView && !(navEntryInstance.nativeView instanceof Placeholder) && !(navEntryInstance.nativeView instanceof Page)) {
+            navEntryInstance.$off('hook:updated', onUpdate)
+            reject(new Error(`navigateTo: Navigation destination rendered a <${navEntryInstance.nativeView.typeName}> where a <Page> was expected`))
             navEntryInstance.$destroy()
           }
         }
-        page.on('navigatedFrom', handler)
-
-        if (resolveOnEvent) {
-          const resolveHandler = args => {
-            if (!resolved) {
-              resolved = true
-              resolve(page)
-            }
-            page.off(resolveOnEvent, resolveHandler)
-          }
-          page.on(resolveOnEvent, resolveHandler)
-        }
-
-        // ensure that the navEntryInstance vue instance is destroyed when the
-        // page is disposed (clearHistory: true for example)
-        const dispose = page.disposeNativeView
-        page.disposeNativeView = (...args) => {
-          navEntryInstance.$destroy()
-          return dispose.call(page, args)
-        }
-
-        frame.navigate(Object.assign({}, options, { create: () => page }))
-        if (!resolveOnEvent) {
-          resolved = true
-          resolve(page)
-        }
+        navEntryInstance.$on('hook:updated', onUpdate)
+        // non-asyncFactory user component will have already produced its nativeView at this point,
+        // so we invoke the updated cb once ourselves manually
+        onUpdate()
       })
     }
   }

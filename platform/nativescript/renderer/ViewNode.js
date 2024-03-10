@@ -26,7 +26,16 @@ export default class ViewNode {
     /* istanbul ignore next
      * make vue happy :)
      */
-    this.hasAttribute = this.removeAttribute = () => false
+    this.hasAttribute = () => false
+
+    /** This is the reason there needed to always be some class on <transition> children, because
+     * without it removeClass would call el.removeAttribute('class') but it wouldn't actually remove
+     * the class at the end of a transition, and this would actually make it cancel and then run the
+     * same transition AGAIN (causing flickering) */
+    this.removeAttribute = key => {
+      console.log(`removeAttribute delegating to setAttribute(${key}, "")`)
+      this.setAttribute(key, "")
+    }
   }
 
   /* istanbul ignore next */
@@ -124,7 +133,7 @@ export default class ViewNode {
         }
       }
     } catch (e) {
-      // ignore
+      console.warn(`Error setting attribute ${key} to ${value} on ${nv}`, e)
     }
   }
 

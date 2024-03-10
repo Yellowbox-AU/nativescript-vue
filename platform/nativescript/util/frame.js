@@ -9,6 +9,9 @@ export function setFrame(id, frame) {
   frames[id].unshift(frame)
 }
 
+/** @typedef {import('../runtime/components/frame')['default']} FrameOptions */
+
+/** @returns {import('vue/types/vue').CombinedVueInstance<import('../../../').NativeScriptVue, ReturnType<FrameOptions['data']>, FrameOptions['methods'], {}, Record<keyof FrameOptions['props'], any>>} */
 export function getFrame(id) {
   return frames[id] && frames[id][0]
 }
